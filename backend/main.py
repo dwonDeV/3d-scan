@@ -10,7 +10,6 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -25,7 +24,15 @@ app.add_middleware(
 WORK_DIR = Path(__file__).parent / "scans"
 WORK_DIR.mkdir(exist_ok=True)
 
-# 진행 중인 학습 상태 저장 (메모리)
+VENV_BIN = Path(__file__).parent / "venv" / "bin"
+
+# PATH에 venv/bin과 homebrew bin 추가 (colmap, ns-* 명령어 인식)
+PIPELINE_ENV = {
+    **os.environ,
+    "PATH": f"{VENV_BIN}:/opt/homebrew/bin:/usr/local/bin:{os.environ.get('PATH', '')}",
+    "PYTORCH_ENABLE_MPS_FALLBACK": "1",
+}
+
 jobs: dict[str, dict] = {}
 
 
@@ -36,8 +43,8 @@ class ScanRequest(BaseModel):
 
 class ScanStatus(BaseModel):
     id: str
-    status: str          # queued | processing | done | error
-    progress: int        # 0-100
+    status: str       # queued | processing | done | error
+    progress: int
     message: str
     splat_url: Optional[str] = None
 
@@ -54,22 +61,13 @@ async def create_scan(req: ScanRequest):
     images_dir = scan_dir / "images"
     images_dir.mkdir(parents=True)
 
-    # base64 프레임 → JPEG 파일로 저장
     for i, frame_b64 in enumerate(req.frames):
-        header, _, data = frame_b64.partition(",")
+        _, _, data = frame_b64.partition(",")
         img_bytes = base64.b64decode(data if data else frame_b64)
         (images_dir / f"frame_{i:04d}.jpg").write_bytes(img_bytes)
 
-    jobs[scan_id] = {
-        "status": "queued",
-        "progress": 0,
-        "message": f"{len(req.frames)}장 저장 완료. 처리 대기 중…",
-        "splat_url": None,
-    }
-
-    # 백그라운드에서 처리 시작
+    jobs[scan_id] = {"status": "queued", "progress": 0, "message": f"{len(req.frames)}장 저장 완료.", "splat_url": None}
     asyncio.create_task(run_pipeline(scan_id, scan_dir, images_dir))
-
     return ScanStatus(id=scan_id, **jobs[scan_id])
 
 
@@ -82,102 +80,105 @@ def get_scan_status(scan_id: str):
 
 @app.get("/scan/{scan_id}/model")
 def get_model(scan_id: str):
-    splat_path = WORK_DIR / scan_id / "output.splat"
-    if not splat_path.exists():
-        raise HTTPException(status_code=404, detail="Model not ready")
-    return FileResponse(splat_path, media_type="application/octet-stream", filename="output.splat")
+    for ext in ["output.splat", "output.ply"]:
+        p = WORK_DIR / scan_id / ext
+        if p.exists():
+            return FileResponse(p, media_type="application/octet-stream", filename=ext)
+    raise HTTPException(status_code=404, detail="Model not ready")
+
+
+def run_cmd(args: list[str], cwd=None, timeout=600) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=PIPELINE_ENV,
+        cwd=cwd,
+    )
 
 
 async def run_pipeline(scan_id: str, scan_dir: Path, images_dir: Path):
+    log_file = scan_dir / "pipeline.log"
+
     def update(status: str, progress: int, message: str, splat_url=None):
-        jobs[scan_id] = {
-            "status": status,
-            "progress": progress,
-            "message": message,
-            "splat_url": splat_url,
-        }
-        print(f"[{scan_id[:8]}] {progress}% - {message}")
+        jobs[scan_id] = {"status": status, "progress": progress, "message": message, "splat_url": splat_url}
+        print(f"[{scan_id[:8]}] {progress}% {message}")
+
+    def log(label: str, result: subprocess.CompletedProcess):
+        with open(log_file, "a") as f:
+            f.write(f"\n=== {label} (returncode={result.returncode}) ===\n")
+            f.write(f"STDOUT:\n{result.stdout}\n")
+            f.write(f"STDERR:\n{result.stderr}\n")
 
     try:
-        # 1. COLMAP으로 카메라 포즈 추정
-        update("processing", 5, "카메라 포즈 추정 중… (COLMAP)")
+        # 1. COLMAP — 카메라 포즈 추정
+        update("processing", 5, "카메라 포즈 추정 중… (COLMAP, 수 분 소요)")
         colmap_dir = scan_dir / "colmap"
-        result = await asyncio.to_thread(
-            subprocess.run,
-            [
-                "ns-process-data", "images",
-                "--data", str(images_dir),
-                "--output-dir", str(colmap_dir),
-                "--no-gpu",
-            ],
-            capture_output=True, text=True, timeout=600,
-        )
+        result = await asyncio.to_thread(run_cmd, [
+            "ns-process-data", "images",
+            "--data", str(images_dir),
+            "--output-dir", str(colmap_dir),
+        ], timeout=900)
+        log("ns-process-data", result)
+
         if result.returncode != 0:
-            update("error", 0, f"COLMAP 실패: {result.stderr[-300:]}")
+            combined = (result.stdout + result.stderr)[-500:]
+            update("error", 0, f"COLMAP 실패: {combined}")
             return
 
-        update("processing", 35, "Gaussian Splatting 학습 시작…")
+        # transforms.json 존재 확인
+        if not (colmap_dir / "transforms.json").exists():
+            update("error", 0, "COLMAP은 성공했지만 transforms.json이 없습니다. 사진이 너무 적거나 흔들렸을 수 있습니다.")
+            return
 
-        # 2. splatfacto 학습 (M2 MPS)
+        # 2. splatfacto 학습
+        update("processing", 30, "Gaussian Splatting 학습 중… (20~40분 소요)")
         train_output = scan_dir / "train_output"
-        result = await asyncio.to_thread(
-            subprocess.run,
-            [
-                "ns-train", "splatfacto",
-                "--data", str(colmap_dir),
-                "--output-dir", str(train_output),
-                "--max-num-iterations", "3000",
-                "--pipeline.model.cull-alpha-thresh", "0.005",
-                "--viewer.quit-on-train-completion", "True",
-            ],
-            capture_output=True, text=True, timeout=3600,
-            env={**os.environ, "PYTORCH_ENABLE_MPS_FALLBACK": "1"},
-        )
+        result = await asyncio.to_thread(run_cmd, [
+            "ns-train", "splatfacto",
+            "--data", str(colmap_dir),
+            "--output-dir", str(train_output),
+            "--max-num-iterations", "3000",
+            "--viewer.quit-on-train-completion", "True",
+        ], timeout=7200)
+        log("ns-train", result)
+
         if result.returncode != 0:
-            update("error", 0, f"학습 실패: {result.stderr[-300:]}")
+            combined = (result.stdout + result.stderr)[-500:]
+            update("error", 0, f"학습 실패: {combined}")
             return
 
-        update("processing", 85, ".splat 파일 변환 중…")
-
-        # 3. 학습된 체크포인트를 .splat으로 export
-        ckpt_dirs = sorted((train_output / "splatfacto").glob("*/nerfstudio_models"))
-        if not ckpt_dirs:
-            update("error", 0, "체크포인트를 찾을 수 없습니다")
+        # 3. .splat export
+        update("processing", 85, ".splat 변환 중…")
+        config_files = list(train_output.glob("**/config.yml"))
+        if not config_files:
+            update("error", 0, "학습 config를 찾을 수 없습니다.")
             return
 
-        ckpt_dir = ckpt_dirs[-1]
-        splat_out = scan_dir / "output.splat"
-        export_result = await asyncio.to_thread(
-            subprocess.run,
-            [
-                "ns-export", "gaussian-splat",
-                "--load-config", str(ckpt_dir.parent.parent / "config.yml"),
-                "--output-dir", str(scan_dir),
-            ],
-            capture_output=True, text=True, timeout=300,
-            env={**os.environ, "PYTORCH_ENABLE_MPS_FALLBACK": "1"},
-        )
+        export_result = await asyncio.to_thread(run_cmd, [
+            "ns-export", "gaussian-splat",
+            "--load-config", str(config_files[-1]),
+            "--output-dir", str(scan_dir),
+        ], timeout=300)
+        log("ns-export", export_result)
 
-        # splat 파일 찾아서 이동
-        splat_files = list((scan_dir).glob("**/*.splat"))
-        if splat_files:
-            shutil.copy(splat_files[0], splat_out)
+        # 결과 파일 탐색
+        for pattern, dest_name in [("**/*.splat", "output.splat"), ("**/*.ply", "output.ply")]:
+            found = [f for f in scan_dir.glob(pattern) if f.name != dest_name]
+            if found:
+                shutil.copy(found[0], scan_dir / dest_name)
+                break
 
-        if splat_out.exists():
+        if (scan_dir / "output.splat").exists() or (scan_dir / "output.ply").exists():
             update("done", 100, "3D 모델 생성 완료!", splat_url=f"/scan/{scan_id}/model")
         else:
-            # export 실패해도 ply로 대체
-            ply_files = list(scan_dir.glob("**/*.ply"))
-            if ply_files:
-                shutil.copy(ply_files[0], scan_dir / "output.ply")
-                update("done", 100, "3D 모델 생성 완료! (PLY 포맷)", splat_url=f"/scan/{scan_id}/model")
-            else:
-                update("error", 0, f"모델 export 실패: {export_result.stderr[-200:]}")
+            update("error", 0, f"export 실패. 로그: {log_file}")
 
     except asyncio.TimeoutError:
-        update("error", 0, "처리 시간이 너무 오래 걸렸습니다 (타임아웃)")
+        update("error", 0, "처리 시간 초과 (타임아웃)")
     except Exception as e:
-        update("error", 0, f"오류 발생: {str(e)}")
+        update("error", 0, f"오류: {e}")
 
 
 if __name__ == "__main__":
