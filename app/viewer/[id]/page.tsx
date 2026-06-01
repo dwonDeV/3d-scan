@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 
 const GaussianViewer = dynamic(() => import("@/components/GaussianViewer"), { ssr: false });
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiUrl } from "@/lib/useApiUrl";
 
 type Scan = { id: string; name: string; date: string; photoCount: number; status: string; photos?: string[] };
 type BackendStatus = { status: string; progress: number; message: string; splat_url?: string };
@@ -33,7 +33,7 @@ export default function ViewerPage({ params }: { params: Promise<{ id: string }>
 
     const poll = async () => {
       try {
-        const res = await fetch(`${API_BASE}/scan/${id}`);
+        const res = await fetch(`${getApiUrl()}/scan/${id}`);
         if (!res.ok) return;
         const data: BackendStatus = await res.json();
         setBackendStatus(data);

@@ -9,7 +9,7 @@ type Phase = "preview" | "recording" | "extracting" | "uploading" | "ready" | "e
 const FRAME_INTERVAL_SEC = 0.5;
 const MIN_FRAMES = 20;
 const FRAME_MAX_WIDTH = 960;
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiUrl } from "@/lib/useApiUrl";
 
 export default function CapturePage() {
   const router = useRouter();
@@ -164,7 +164,7 @@ export default function CapturePage() {
     setUploadProgress("백엔드에 프레임 전송 중…");
 
     try {
-      const res = await fetch(`${API_BASE}/scan`, {
+      const res = await fetch(`${getApiUrl()}/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ frames: currentFrames, name: scanName }),

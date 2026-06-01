@@ -42,6 +42,11 @@ class ScanStatus(BaseModel):
     splat_url: Optional[str] = None
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/scan", response_model=ScanStatus)
 async def create_scan(req: ScanRequest):
     scan_id = str(uuid.uuid4())

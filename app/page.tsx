@@ -22,9 +22,12 @@ export default function HomePage() {
   return (
     <div className="flex flex-col min-h-screen px-5 pt-14 pb-8 max-w-md mx-auto w-full">
       <header className="mb-10">
-        <p className="text-xs font-semibold tracking-widest text-indigo-400 uppercase mb-2">3D Home Scanner</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold tracking-widest text-indigo-400 uppercase">3D Home Scanner</p>
+          <Link href="/settings" className="w-8 h-8 rounded-full bg-white/8 flex items-center justify-center text-white/40 text-base">⚙️</Link>
+        </div>
         <h1 className="text-3xl font-bold text-white leading-tight">내 공간을<br />3D로 담아보세요</h1>
-        <p className="mt-3 text-sm text-white/50">사진 여러 장으로 방 전체를 3D 구조도로 변환합니다</p>
+        <p className="mt-3 text-sm text-white/50">영상 촬영 한 번으로 방 전체를 3D 구조도로 변환합니다</p>
       </header>
 
       <Link
