@@ -1,65 +1,73 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+type Scan = { id: string; name: string; date: string; photoCount: number; status: string };
+
+export default function HomePage() {
+  const [scans, setScans] = useState<Scan[]>([]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("scans");
+    if (stored) setScans(JSON.parse(stored));
+  }, []);
+
+  const statusLabel = (status: string) => {
+    if (status === "processing") return { text: "처리 중", color: "text-yellow-400" };
+    if (status === "done") return { text: "완료", color: "text-emerald-400" };
+    return { text: "촬영 중", color: "text-blue-400" };
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex flex-col min-h-screen px-5 pt-14 pb-8 max-w-md mx-auto w-full">
+      <header className="mb-10">
+        <p className="text-xs font-semibold tracking-widest text-indigo-400 uppercase mb-2">3D Home Scanner</p>
+        <h1 className="text-3xl font-bold text-white leading-tight">내 공간을<br />3D로 담아보세요</h1>
+        <p className="mt-3 text-sm text-white/50">사진 여러 장으로 방 전체를 3D 구조도로 변환합니다</p>
+      </header>
+
+      <Link
+        href="/capture"
+        className="w-full rounded-2xl bg-indigo-600 py-4 text-white font-semibold text-base flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/40"
+      >
+        <span className="text-xl">📷</span>
+        새 스캔 시작
+      </Link>
+
+      {scans.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-xs font-semibold tracking-widest text-white/40 uppercase mb-4">최근 스캔</h2>
+          <div className="flex flex-col gap-3">
+            {scans.map((scan) => {
+              const s = statusLabel(scan.status);
+              return (
+                <Link
+                  key={scan.id}
+                  href={`/viewer/${scan.id}`}
+                  className="w-full rounded-2xl bg-white/5 p-4 text-left flex items-center gap-4"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-indigo-900/60 flex items-center justify-center text-2xl flex-shrink-0">
+                    🏠
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-white text-sm truncate">{scan.name}</p>
+                    <p className="text-xs text-white/40 mt-0.5">{scan.photoCount}장 · {scan.date}</p>
+                  </div>
+                  <span className={`text-xs font-medium ${s.color} flex-shrink-0`}>{s.text}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {scans.length === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 mt-16">
+          <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center text-5xl">🏗️</div>
+          <p className="text-white/30 text-sm">아직 스캔한 공간이 없습니다<br />새 스캔을 시작해보세요</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
     </div>
   );
 }
