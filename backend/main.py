@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sfm import run_sfm
 
 app = FastAPI()
 
@@ -112,24 +113,17 @@ async def run_pipeline(scan_id: str, scan_dir: Path, images_dir: Path):
             f.write(f"STDERR:\n{result.stderr}\n")
 
     try:
-        # 1. COLMAP — 카메라 포즈 추정
-        update("processing", 5, "카메라 포즈 추정 중… (COLMAP, 수 분 소요)")
+        # 1. SfM — pycolmap으로 카메라 포즈 추정 (COLMAP CLI 크래시 우회)
+        update("processing", 5, "카메라 포즈 추정 중… (SfM, 수 분 소요)")
         colmap_dir = scan_dir / "colmap"
-        result = await asyncio.to_thread(run_cmd, [
-            "ns-process-data", "images",
-            "--data", str(images_dir),
-            "--output-dir", str(colmap_dir),
-        ], timeout=900)
-        log("ns-process-data", result)
-
-        if result.returncode != 0:
-            combined = (result.stdout + result.stderr)[-500:]
-            update("error", 0, f"COLMAP 실패: {combined}")
+        try:
+            await asyncio.to_thread(run_sfm, images_dir, colmap_dir)
+        except Exception as e:
+            update("error", 0, f"SfM 실패: {e}")
             return
 
-        # transforms.json 존재 확인
         if not (colmap_dir / "transforms.json").exists():
-            update("error", 0, "COLMAP은 성공했지만 transforms.json이 없습니다. 사진이 너무 적거나 흔들렸을 수 있습니다.")
+            update("error", 0, "transforms.json 생성 실패. 사진이 너무 적거나 흔들렸을 수 있습니다.")
             return
 
         # 2. splatfacto 학습
