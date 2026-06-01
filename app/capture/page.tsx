@@ -220,7 +220,7 @@ export default function CapturePage() {
   const ready = frames.length >= MIN_FRAMES;
 
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto w-full bg-black overflow-hidden">
+    <div className="flex flex-col max-w-md mx-auto w-full bg-black overflow-hidden" style={{ height: "100dvh" }}>
       <canvas ref={canvasRef} className="hidden" />
 
       {/* 카메라 프리뷰 */}
@@ -294,7 +294,7 @@ export default function CapturePage() {
       </div>
 
       {/* 하단 컨트롤 */}
-      <div className="bg-black flex-shrink-0 pb-10 pt-6 px-5">
+      <div className="bg-black flex-shrink-0 pt-5 px-5" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 20px)" }}>
         {phase === "preview" && (
           <div className="mb-5">
             <input
