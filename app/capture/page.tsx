@@ -220,97 +220,101 @@ export default function CapturePage() {
   const ready = frames.length >= MIN_FRAMES;
 
   return (
-    <div className="flex flex-col max-w-md mx-auto w-full bg-black overflow-hidden" style={{ height: "100dvh" }}>
+    <div className="relative max-w-md mx-auto w-full bg-black overflow-hidden" style={{ height: "100dvh" }}>
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* 카메라 프리뷰 */}
-      <div className="relative flex-1 bg-black">
-        {camError ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center gap-4">
-            <span className="text-5xl">📷</span>
-            <p className="text-white/60 text-sm whitespace-pre-line">{camError}</p>
-          </div>
-        ) : (
-          <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-        )}
-
-        {/* 상단 오버레이 */}
-        <div className="absolute top-0 left-0 right-0 pt-12 px-5 flex items-center gap-3 bg-gradient-to-b from-black/60 to-transparent">
-          <Link href="/" className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white">←</Link>
-          <span className="text-white font-semibold text-base flex-1">{scanName}</span>
-          {phase === "recording" && (
-            <span className="flex items-center gap-1.5 bg-red-600 rounded-full px-3 py-1">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span className="text-white text-xs font-mono font-bold">{formatTime(recordingTime)}</span>
-            </span>
-          )}
+      {/* 카메라 프리뷰 — 화면 전체 */}
+      {camError ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center gap-4">
+          <span className="text-5xl">📷</span>
+          <p className="text-white/60 text-sm whitespace-pre-line">{camError}</p>
         </div>
+      ) : (
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline />
+      )}
 
-        {/* 촬영 가이드 */}
-        {phase === "preview" && !camError && (
-          <div className="absolute inset-x-0 bottom-40 flex flex-col items-center gap-2 px-8 text-center">
-            <div className="rounded-2xl bg-black/50 backdrop-blur px-4 py-3">
-              <p className="text-white/80 text-xs leading-relaxed">
-                천천히 공간을 돌며 촬영하세요<br />
-                10~30초 권장 · 조명이 밝을수록 정확합니다
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* 프레임 추출 중 */}
-        {phase === "extracting" && (
-          <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-5 px-8">
-            <div className="w-14 h-14 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-            <div className="text-center">
-              <p className="text-white font-semibold mb-1">프레임 추출 중…</p>
-              <p className="text-white/40 text-sm">영상에서 사진을 자동으로 추출합니다</p>
-            </div>
-            <div className="w-full max-w-xs">
-              <div className="flex justify-between text-xs text-white/40 mb-1.5">
-                <span>진행률</span><span>{extractProgress}%</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full transition-all duration-200" style={{ width: `${extractProgress}%` }} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 오류 */}
-        {phase === "error" && (
-          <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-4 px-8 text-center">
-            <span className="text-5xl">⚠️</span>
-            <p className="text-white font-semibold">문제가 발생했습니다</p>
-            <p className="text-white/50 text-sm">{errorMsg}</p>
-            <button
-              onClick={() => { setPhase("preview"); setErrorMsg(""); }}
-              className="mt-2 px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
-            >
-              다시 시도
-            </button>
-          </div>
+      {/* 상단 오버레이 */}
+      <div className="absolute top-0 left-0 right-0 px-5 flex items-center gap-3 bg-gradient-to-b from-black/70 to-transparent"
+        style={{ paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: "32px" }}>
+        <Link href="/" className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white flex-shrink-0">←</Link>
+        <span className="text-white font-semibold text-base flex-1 truncate">{scanName}</span>
+        {phase === "recording" && (
+          <span className="flex items-center gap-1.5 bg-red-600 rounded-full px-3 py-1 flex-shrink-0">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <span className="text-white text-xs font-mono font-bold">{formatTime(recordingTime)}</span>
+          </span>
         )}
       </div>
 
-      {/* 하단 컨트롤 */}
-      <div className="bg-black flex-shrink-0 pt-5 px-5" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 20px)" }}>
+      {/* 촬영 가이드 */}
+      {phase === "preview" && !camError && (
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col items-center px-8 text-center pointer-events-none">
+          <div className="rounded-2xl bg-black/50 backdrop-blur px-4 py-3">
+            <p className="text-white/80 text-xs leading-relaxed">
+              천천히 공간을 돌며 촬영하세요<br />
+              10~30초 권장 · 조명이 밝을수록 정확합니다
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 프레임 추출 중 */}
+      {phase === "extracting" && (
+        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-5 px-8">
+          <div className="w-14 h-14 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <div className="text-center">
+            <p className="text-white font-semibold mb-1">프레임 추출 중…</p>
+            <p className="text-white/40 text-sm">영상에서 사진을 자동으로 추출합니다</p>
+          </div>
+          <div className="w-full max-w-xs">
+            <div className="flex justify-between text-xs text-white/40 mb-1.5">
+              <span>진행률</span><span>{extractProgress}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-200" style={{ width: `${extractProgress}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 오류 */}
+      {phase === "error" && (
+        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-4 px-8 text-center">
+          <span className="text-5xl">⚠️</span>
+          <p className="text-white font-semibold">문제가 발생했습니다</p>
+          <p className="text-white/50 text-sm">{errorMsg}</p>
+          <button
+            onClick={() => { setPhase("preview"); setErrorMsg(""); }}
+            className="mt-2 px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {/* 하단 컨트롤 — 카메라 위 오버레이 */}
+      <div
+        className="absolute bottom-0 left-0 right-0 px-5 bg-gradient-to-t from-black/80 to-transparent"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 24px)", paddingTop: "48px" }}
+      >
+        {/* 공간 이름 입력 (preview) */}
         {phase === "preview" && (
-          <div className="mb-5">
+          <div className="mb-4">
             <input
               type="text"
               value={scanName}
               onChange={(e) => setScanName(e.target.value)}
-              className="w-full bg-white/10 rounded-xl px-4 py-3 text-white text-sm border border-white/15 focus:border-indigo-500 focus:outline-none"
+              className="w-full bg-black/50 backdrop-blur rounded-xl px-4 py-3 text-white text-sm border border-white/20 focus:border-indigo-500 focus:outline-none"
               placeholder="공간 이름 (예: 거실, 침실)"
             />
           </div>
         )}
 
+        {/* 프레임 미리보기 (ready) */}
         {phase === "ready" && (
-          <div className="mb-5">
+          <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-white/60 text-xs">추출된 프레임</span>
+              <span className="text-white/70 text-xs">추출된 프레임</span>
               <span className={`text-xs font-semibold ${ready ? "text-emerald-400" : "text-white/50"}`}>
                 {frames.length}장 {ready ? "✓" : `(최소 ${MIN_FRAMES}장 필요)`}
               </span>
@@ -318,10 +322,10 @@ export default function CapturePage() {
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {frames.slice(0, 8).map((f, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={f} alt="" className="h-14 w-20 object-cover rounded-lg flex-shrink-0" />
+                <img key={i} src={f} alt="" className="h-12 w-16 object-cover rounded-lg flex-shrink-0" />
               ))}
               {frames.length > 8 && (
-                <div className="h-14 w-14 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+                <div className="h-12 w-12 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
                   <span className="text-white/60 text-xs">+{frames.length - 8}</span>
                 </div>
               )}
@@ -329,48 +333,48 @@ export default function CapturePage() {
           </div>
         )}
 
+        {/* 버튼 */}
         <div className="flex items-center justify-center">
           {(phase === "preview" || phase === "recording") && (
             <button
               onClick={phase === "preview" ? startRecording : stopRecording}
               disabled={!!camError}
-              className="relative flex items-center justify-center"
+              className="flex items-center justify-center"
             >
-              <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all ${
-                phase === "recording" ? "border-red-500" : "border-white/60"
-              }`}>
+              <div className={`w-18 h-18 rounded-full border-4 flex items-center justify-center transition-all ${
+                phase === "recording" ? "border-red-500" : "border-white/70"
+              }`} style={{ width: 72, height: 72 }}>
                 <div className={`transition-all duration-200 ${
-                  phase === "recording" ? "w-8 h-8 rounded-lg bg-red-500" : "w-14 h-14 rounded-full bg-white"
+                  phase === "recording" ? "w-7 h-7 rounded-lg bg-red-500" : "w-12 h-12 rounded-full bg-white"
                 }`} />
               </div>
             </button>
           )}
 
           {phase === "ready" && (
-            <button
-              onClick={handleProcess}
-              disabled={!ready}
-              className={`w-full rounded-2xl py-4 font-semibold text-base flex items-center justify-center gap-2 ${
-                ready ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40" : "bg-white/10 text-white/30"
-              }`}
-            >
-              🧊 3D 구조도 생성
-            </button>
+            <div className="w-full flex flex-col gap-2">
+              <button
+                onClick={handleProcess}
+                disabled={!ready}
+                className={`w-full rounded-2xl py-3.5 font-semibold text-base flex items-center justify-center gap-2 ${
+                  ready ? "bg-indigo-600 text-white" : "bg-white/10 text-white/30"
+                }`}
+              >
+                🧊 3D 구조도 생성
+              </button>
+              <button
+                onClick={() => { setFrames([]); setPhase("preview"); }}
+                className="w-full py-2 text-white/40 text-sm text-center"
+              >
+                다시 촬영하기
+              </button>
+            </div>
           )}
 
           {phase === "extracting" && (
-            <div className="py-4 text-white/30 text-sm">처리 중…</div>
+            <div className="py-3 text-white/30 text-sm">처리 중…</div>
           )}
         </div>
-
-        {phase === "ready" && (
-          <button
-            onClick={() => { setFrames([]); setPhase("preview"); }}
-            className="w-full mt-3 py-2 text-white/40 text-sm text-center"
-          >
-            다시 촬영하기
-          </button>
-        )}
       </div>
     </div>
   );
